@@ -134,6 +134,110 @@ def search_parcels(q: str, limit: int = 10):
 
     return []
 
+def fetch_latest_fred_features() -> Dict[str, Any]:
+    """
+    Load the latest validated FRED features for live predictions.
+
+    If either query fails, the prediction can fall back to the values
+    already stored in proxy_training_data.
+    """
+    supabase = get_supabase()
+    features: Dict[str, Any] = {}
+    freshness: Dict[str, Any] = {
+        "source": "FRED",
+        "mortgage_indicator_date": None,
+        "unemployment_indicator_date": None,
+        "fresh_values_applied": False,
+        "warnings": [],
+    }
+
+    try:
+        response = (
+            supabase
+            .table("mortgage_rate_indicators")
+            .select(
+                "indicator_date,"
+                "mortgage_rate,"
+                "mortgage_rate_4week_avg,"
+                "mortgage_rate_13week_avg,"
+                "mortgage_rate_change_52week"
+            )
+            .order("indicator_date", desc=True)
+            .limit(1)
+            .execute()
+        )
+
+        if response.data:
+            row = response.data[0]
+            freshness["mortgage_indicator_date"] = row.get(
+                "indicator_date"
+            )
+
+            for field in (
+                "mortgage_rate",
+                "mortgage_rate_4week_avg",
+                "mortgage_rate_13week_avg",
+                "mortgage_rate_change_52week",
+            ):
+                if row.get(field) is not None:
+                    features[field] = row[field]
+        else:
+            freshness["warnings"].append(
+                "No mortgage indicator row was available."
+            )
+
+    except Exception:
+        freshness["warnings"].append(
+            "Latest mortgage indicators could not be loaded."
+        )
+
+    try:
+        response = (
+            supabase
+            .table("unemployment_rate_indicators")
+            .select(
+                "indicator_date,"
+                "unemployment_rate,"
+                "unemployment_rate_3month_avg,"
+                "unemployment_rate_12month_avg,"
+                "unemployment_pressure_score"
+            )
+            .order("indicator_date", desc=True)
+            .limit(1)
+            .execute()
+        )
+
+        if response.data:
+            row = response.data[0]
+            freshness["unemployment_indicator_date"] = row.get(
+                "indicator_date"
+            )
+
+            for field in (
+                "unemployment_rate",
+                "unemployment_rate_3month_avg",
+                "unemployment_rate_12month_avg",
+                "unemployment_pressure_score",
+            ):
+                if row.get(field) is not None:
+                    features[field] = row[field]
+        else:
+            freshness["warnings"].append(
+                "No unemployment indicator row was available."
+            )
+
+    except Exception:
+        freshness["warnings"].append(
+            "Latest unemployment indicators could not be loaded."
+        )
+
+    freshness["fresh_values_applied"] = bool(features)
+
+    return {
+        "features": features,
+        "freshness": freshness,
+    }
+
 
 
 

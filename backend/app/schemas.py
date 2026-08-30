@@ -35,12 +35,21 @@ class ParcelSummary(BaseModel):
     total_value: Optional[float] = None
 
 
+class DataFreshness(BaseModel):
+    source: str = "FRED"
+    mortgage_indicator_date: Optional[str] = None
+    unemployment_indicator_date: Optional[str] = None
+    fresh_values_applied: bool = False
+    warnings: List[str] = Field(default_factory=list)
+
+
 class PredictionResponse(BaseModel):
     prediction: PredictionRange
     parcel: Optional[ParcelSummary] = None
     model_segment: Optional[str] = None
     model_notes: List[str]
     disclaimer: str
+    data_freshness: Optional[DataFreshness] = None
 
 
 class SearchResult(BaseModel):

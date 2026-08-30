@@ -15,6 +15,7 @@ from .schemas import (
     SearchResult,
 )
 from .supabase_client import (
+    fetch_latest_fred_features,
     fetch_proxy_training_row_by_parcel_id,
     search_parcels,
     supabase_is_configured,
@@ -109,9 +110,16 @@ def predict_by_parcel(request: ParcelPredictionRequest):
 
     if not row:
         raise HTTPException(status_code=404, detail=f"Parcel not found in proxy_training_data: {request.parcel_id}")
+    fred_context = fetch_latest_fred_features()
 
-    result = model_service.predict(row)
+    prediction_features = {
+        **row,
+        **fred_context["features"],
+    }
+
+    result = model_service.predict(prediction_features)
     result["parcel"] = model_service.parcel_summary(row)
+    result["data_freshness"] = fred_context["freshness"]
 
     return result
 
