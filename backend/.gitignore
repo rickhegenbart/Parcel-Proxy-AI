@@ -1,0 +1,17 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+
+# Large ML model artifacts
+app/ml/artifacts/*.pkl
+app/ml/artifacts/*.zip
+
+# Environment / secret files
+.env
+.env.*
+!.env.example
+
+# Python cache
+__pycache__/
+*.pyc

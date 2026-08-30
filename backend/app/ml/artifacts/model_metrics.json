@@ -1,0 +1,26 @@
+{
+  "baseline_metrics": {
+    "model": "median_baseline",
+    "row_count": 15661,
+    "mae": 193960.50641721472,
+    "median_absolute_error": 137500.0,
+    "rmse": 326864.2690285648,
+    "r2": -0.005723250506841415,
+    "mape_pct": 50622.63311366633,
+    "within_10_pct": 16.80607879445757,
+    "within_15_pct": 24.430113019602835,
+    "within_20_pct": 31.102739288678883
+  },
+  "model_metrics": {
+    "model": "random_forest_proxy_model",
+    "row_count": 15661,
+    "mae": 90335.01448487,
+    "median_absolute_error": 35547.31286458197,
+    "rmse": 229872.36766328424,
+    "r2": 0.5025870001213464,
+    "mape_pct": 301.09531967203964,
+    "within_10_pct": 33.873954409041566,
+    "within_15_pct": 46.02515803588532,
+    "within_20_pct": 55.14973501053573
+  }
+}
