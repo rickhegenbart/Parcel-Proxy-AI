@@ -1,0 +1,48 @@
+name: Update NOAA Storm Events
+
+on:
+  workflow_dispatch:
+
+  schedule:
+    # Refresh recent NOAA revisions monthly on the 25th.
+    - cron: "30 15 25 * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-noaa-storm-events
+  cancel-in-progress: false
+
+jobs:
+  update-noaa:
+    name: Update Yellowstone County storm events
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Verify pipeline syntax
+        run: python -m py_compile pipeline/update_noaa_storm_events.py
+
+      - name: Update NOAA Storm Events
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python -m pipeline.update_noaa_storm_events
