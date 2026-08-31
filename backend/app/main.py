@@ -500,6 +500,7 @@ def get_parcel_context(parcel_id: str):
         grouped = {
             "construction_cost": [],
             "environmental_risk": [],
+            "storm_history": [],
             "school_context": [],
             "public_safety": [],
             "civic_disruption": [],
@@ -599,6 +600,207 @@ def get_parcel_context(parcel_id: str):
             category = row.get("context_category")
             if category in grouped:
                 grouped[category].append(row)
+                # Load the Yellowstone County NOAA storm-history summary.
+        # NOAA records are county-level historical context and do not
+        # represent parcel-specific hazard exposure.
+        if county_context_id:
+            storm_result = (
+                client
+                .table("noaa_storm_event_summary")
+                .select("*")
+                .eq("county_fips", "30111")
+                .limit(1)
+                .execute()
+            )
+
+            storm_summary = (
+                storm_result.data[0]
+                if storm_result.data
+                else None
+            )
+
+            if storm_summary:
+                earliest_event = str(
+                    storm_summary.get("earliest_event_date")
+                    or ""
+                )[:10]
+                latest_event = str(
+                    storm_summary.get("latest_event_date")
+                    or ""
+                )[:10]
+                source_revision = str(
+                    storm_summary.get(
+                        "latest_source_revision_date"
+                    )
+                    or ""
+                )[:10]
+
+                property_damage = float(
+                    storm_summary.get(
+                        "reported_property_damage"
+                    )
+                    or 0
+                )
+                total_injuries = int(
+                    storm_summary.get("total_injuries")
+                    or 0
+                )
+                total_deaths = int(
+                    storm_summary.get("total_deaths")
+                    or 0
+                )
+
+                storm_metrics = [
+                    {
+                        "metric_name":
+                            "Total recorded storm events",
+                        "metric_value":
+                            storm_summary.get(
+                                "total_event_count"
+                            ),
+                        "metric_text":
+                            (
+                                f"{storm_summary.get('total_event_count')} "
+                                "events"
+                            ),
+                        "metric_unit": "events",
+                    },
+                    {
+                        "metric_name":
+                            "Events recorded in the last 10 years",
+                        "metric_value":
+                            storm_summary.get(
+                                "recent_10_year_event_count"
+                            ),
+                        "metric_text":
+                            (
+                                f"{storm_summary.get('recent_10_year_event_count')} "
+                                "events"
+                            ),
+                        "metric_unit": "events",
+                    },
+                    {
+                        "metric_name": "Recorded hail events",
+                        "metric_value":
+                            storm_summary.get(
+                                "hail_event_count"
+                            ),
+                        "metric_text":
+                            (
+                                f"{storm_summary.get('hail_event_count')} "
+                                "events"
+                            ),
+                        "metric_unit": "events",
+                    },
+                    {
+                        "metric_name":
+                            "Recorded thunderstorm-wind events",
+                        "metric_value":
+                            storm_summary.get(
+                                "thunderstorm_wind_event_count"
+                            ),
+                        "metric_text":
+                            (
+                                f"{storm_summary.get('thunderstorm_wind_event_count')} "
+                                "events"
+                            ),
+                        "metric_unit": "events",
+                    },
+                    {
+                        "metric_name":
+                            "Recorded flood and flash-flood events",
+                        "metric_value":
+                            storm_summary.get(
+                                "flood_event_count"
+                            ),
+                        "metric_text":
+                            (
+                                f"{storm_summary.get('flood_event_count')} "
+                                "events"
+                            ),
+                        "metric_unit": "events",
+                    },
+                    {
+                        "metric_name":
+                            "Recorded tornado events",
+                        "metric_value":
+                            storm_summary.get(
+                                "tornado_event_count"
+                            ),
+                        "metric_text":
+                            (
+                                f"{storm_summary.get('tornado_event_count')} "
+                                "events"
+                            ),
+                        "metric_unit": "events",
+                    },
+                    {
+                        "metric_name":
+                            "Reported property damage",
+                        "metric_value": property_damage,
+                        "metric_text":
+                            f"${property_damage:,.0f}",
+                        "metric_unit": "USD",
+                    },
+                    {
+                        "metric_name":
+                            "Recorded injuries and deaths",
+                        "metric_value": None,
+                        "metric_text":
+                            (
+                                f"{total_injuries} injuries · "
+                                f"{total_deaths} deaths"
+                            ),
+                        "metric_unit": None,
+                    },
+                    {
+                        "metric_name":
+                            "Latest recorded storm event",
+                        "metric_value": None,
+                        "metric_text":
+                            latest_event or "Not available",
+                        "metric_unit": None,
+                    },
+                ]
+
+                for index, metric in enumerate(
+                    storm_metrics,
+                    start=1,
+                ):
+                    grouped["storm_history"].append({
+                        "id": f"noaa-storm-{index}",
+                        "parcel_id": parcel_id,
+                        "geography_name":
+                            "Yellowstone County, MT",
+                        "geography_level": "county",
+                        "context_category":
+                            "storm_history",
+                        "metric_name":
+                            metric["metric_name"],
+                        "metric_value":
+                            metric["metric_value"],
+                        "metric_text":
+                            metric["metric_text"],
+                        "metric_unit":
+                            metric["metric_unit"],
+                        "source_name":
+                            "NOAA Storm Events Database",
+                        "source_period":
+                            (
+                                f"{earliest_event} through "
+                                f"{latest_event}"
+                            ),
+                        "source_date": source_revision,
+                        "confidence_level":
+                            "context_only",
+                        "notes": (
+                            "Historical county-level reports. "
+                            "Reporting practices and event coverage "
+                            "have changed over time. A missing event "
+                            "does not prove that severe weather did "
+                            "not occur at a specific parcel."
+                        ),
+                    })
 
         # 2. Load latest construction-cost indicators.
         # These are national context rows and apply broadly across parcels.

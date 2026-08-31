@@ -581,15 +581,16 @@ async function getPrediction(parcelId) {
               )}
               <p className="helperText">
                 These indicators provide context only and do not change the model
-                estimate. Environmental data is Census-tract level; school,
-                public-safety, and disaster data may cover broader areas, while
-                construction-cost indicators are national.
+                estimate. Environmental risk is Census-tract level; historical
+                storm events are county-level; school and public-safety data may
+                cover broader areas; construction-cost indicators are national.
               </p>
 
               <div className="contextGrid">
                 {[
                   ["construction_cost", "Construction Cost Context"],
                   ["environmental_risk", "Environmental Risk Context"],
+                  ["storm_history", "Historical Storm Events"],
                   ["school_context", "School Context"],
                   ["public_safety", "Public Safety Context"],
                   ["civic_disruption", "Civic Disruption Context"]
@@ -602,11 +603,11 @@ async function getPrediction(parcelId) {
                     ) : (
                       <>
                         <p className="contextCount">
-                          Showing {Math.min((parcelContext.context?.[key] || []).length, key === "environmental_risk" ? 10 : key === "school_context" ? 9 : key === "construction_cost" ? 6 : 8)} of {(parcelContext.context?.[key] || []).length} indicators
+                          Showing {Math.min((parcelContext.context?.[key] || []).length, key === "environmental_risk" ? 10 : key === "storm_history" ? 9 : key === "school_context" ? 9 : key === "construction_cost" ? 6 : 8)} of {(parcelContext.context?.[key] || []).length} indicators
                         </p>
 
                         {(parcelContext.context[key] || [])
-                          .slice(0, key === "environmental_risk" ? 10 : key === "school_context" ? 9 : key === "construction_cost" ? 6 : 8)
+                          .slice(0, key === "environmental_risk" ? 10 : key === "storm_history" ? 9 : key === "school_context" ? 9 : key === "construction_cost" ? 6 : 8)
                           .map((item) => (
                         <div className="contextMetric" key={item.id || item.metric_name}>
                           <strong>{item.metric_name}</strong>
