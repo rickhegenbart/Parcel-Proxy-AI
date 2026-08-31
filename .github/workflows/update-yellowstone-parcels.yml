@@ -1,0 +1,49 @@
+name: Update Yellowstone Parcels
+
+on:
+  workflow_dispatch:
+
+  schedule:
+    # Run monthly on the 10th at 2:30 PM UTC.
+    # This allows time for Montana's monthly cadastral release.
+    - cron: "30 14 10 * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-yellowstone-parcels
+  cancel-in-progress: false
+
+jobs:
+  update-parcels:
+    name: Update Yellowstone County parcels
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Verify pipeline syntax
+        run: python -m py_compile pipeline/update_yellowstone_parcels.py
+
+      - name: Update Yellowstone parcel records
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python -m pipeline.update_yellowstone_parcels

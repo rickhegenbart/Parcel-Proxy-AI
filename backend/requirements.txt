@@ -8,3 +8,5 @@ scikit-learn==1.6.0
 joblib==1.4.2
 supabase==2.10.0
 python-multipart==0.0.20
+geopandas==1.0.1
+pyogrio==0.10.0
