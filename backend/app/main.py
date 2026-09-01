@@ -498,13 +498,14 @@ def get_parcel_context(parcel_id: str):
         client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
         grouped = {
-            "construction_cost": [],
-            "environmental_risk": [],
-            "storm_history": [],
-            "school_context": [],
-            "public_safety": [],
-            "civic_disruption": [],
-        }
+    "construction_cost": [],
+    "environmental_risk": [],
+    "demographic_context": [],
+    "storm_history": [],
+    "school_context": [],
+    "public_safety": [],
+    "civic_disruption": [],
+}
 
         # Look up the parcel and its coordinate-derived Census tract.
         parcel_row = fetch_proxy_training_row_by_parcel_id(parcel_id) or {}
@@ -799,6 +800,168 @@ def get_parcel_context(parcel_id: str):
                             "have changed over time. A missing event "
                             "does not prove that severe weather did "
                             "not occur at a specific parcel."
+                        ),
+                    })
+                # Load the latest ACS demographic indicators for the parcel's
+        # coordinate-derived Census tract. These estimates describe the
+        # surrounding tract and are not parcel-specific characteristics.
+        if tract_fips:
+            demographic_result = (
+                client
+                .table("acs_tract_indicators")
+                .select("*")
+                .eq("tract_fips", tract_fips)
+                .order("release_year", desc=True)
+                .limit(1)
+                .execute()
+            )
+
+            demographic_row = (
+                demographic_result.data[0]
+                if demographic_result.data
+                else None
+            )
+
+            if demographic_row:
+                release_year = demographic_row.get(
+                    "release_year"
+                )
+                geography_name = (
+                    demographic_row.get("geography_name")
+                    or mapping_row.get("tract_name")
+                    or f"Census tract {tract_fips}"
+                )
+
+                def format_count(value):
+                    if value is None:
+                        return "Not available"
+                    return f"{int(value):,}"
+
+                def format_currency(value):
+                    if value is None:
+                        return "Not available"
+                    return f"${float(value):,.0f}"
+
+                def format_percentage(value):
+                    if value is None:
+                        return "Not available"
+                    return f"{float(value):.1f}%"
+
+                def format_decimal(value):
+                    if value is None:
+                        return "Not available"
+                    return f"{float(value):.1f}"
+
+                demographic_metrics = [
+                    {
+                        "metric_name": "Total population",
+                        "field": "total_population",
+                        "metric_unit": "people",
+                        "formatter": format_count,
+                    },
+                    {
+                        "metric_name": "Median age",
+                        "field": "median_age",
+                        "metric_unit": "years",
+                        "formatter": format_decimal,
+                    },
+                    {
+                        "metric_name": "Median household income",
+                        "field": "median_household_income",
+                        "metric_unit": "USD",
+                        "formatter": format_currency,
+                    },
+                    {
+                        "metric_name": "Population below poverty",
+                        "field": "poverty_rate_pct",
+                        "metric_unit": "percent",
+                        "formatter": format_percentage,
+                    },
+                    {
+                        "metric_name": "Civilian unemployment rate",
+                        "field": "unemployment_rate_pct",
+                        "metric_unit": "percent",
+                        "formatter": format_percentage,
+                    },
+                    {
+                        "metric_name": "Housing units",
+                        "field": "housing_units",
+                        "metric_unit": "units",
+                        "formatter": format_count,
+                    },
+                    {
+                        "metric_name": "Housing vacancy rate",
+                        "field": "vacancy_rate_pct",
+                        "metric_unit": "percent",
+                        "formatter": format_percentage,
+                    },
+                    {
+                        "metric_name": "Owner-occupancy rate",
+                        "field": "owner_occupancy_rate_pct",
+                        "metric_unit": "percent",
+                        "formatter": format_percentage,
+                    },
+                    {
+                        "metric_name": "Median home value",
+                        "field": "median_home_value",
+                        "metric_unit": "USD",
+                        "formatter": format_currency,
+                    },
+                    {
+                        "metric_name": "Median gross rent",
+                        "field": "median_gross_rent",
+                        "metric_unit": "USD per month",
+                        "formatter": format_currency,
+                    },
+                ]
+
+                for index, metric in enumerate(
+                    demographic_metrics,
+                    start=1,
+                ):
+                    value = demographic_row.get(
+                        metric["field"]
+                    )
+
+                    grouped["demographic_context"].append({
+                        "id": f"acs-demographic-{index}",
+                        "parcel_id": parcel_id,
+                        "geography_name": geography_name,
+                        "geography_level": "census_tract",
+                        "context_category":
+                            "demographic_context",
+                        "metric_name":
+                            metric["metric_name"],
+                        "metric_value": value,
+                        "metric_text":
+                            metric["formatter"](value),
+                        "metric_unit":
+                            metric["metric_unit"],
+                        "source_name":
+                            demographic_row.get(
+                                "source_name"
+                            )
+                            or (
+                                "U.S. Census Bureau ACS "
+                                "5-Year Estimates"
+                            ),
+                        "source_period":
+                            (
+                                f"{release_year} ACS "
+                                "5-Year Estimates"
+                            ),
+                        "source_date":
+                            demographic_row.get(
+                                "source_date"
+                            ),
+                        "confidence_level":
+                            "context_only",
+                        "notes": (
+                            "Census-tract statistical estimate. "
+                            "It describes the surrounding area, "
+                            "not the occupants, income, employment, "
+                            "housing value, or rent of this parcel. "
+                            "ACS estimates include sampling error."
                         ),
                     })
 
