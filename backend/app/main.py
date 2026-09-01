@@ -498,14 +498,15 @@ def get_parcel_context(parcel_id: str):
         client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
         grouped = {
-    "construction_cost": [],
-    "environmental_risk": [],
-    "demographic_context": [],
-    "storm_history": [],
-    "school_context": [],
-    "public_safety": [],
-    "civic_disruption": [],
-}
+            "construction_cost": [],
+            "environmental_risk": [],
+            "demographic_context": [],
+            "rental_context": [],
+            "storm_history": [],
+            "school_context": [],
+            "public_safety": [],
+            "civic_disruption": [],
+        }
 
         # Look up the parcel and its coordinate-derived Census tract.
         parcel_row = fetch_proxy_training_row_by_parcel_id(parcel_id) or {}
@@ -1001,6 +1002,121 @@ def get_parcel_context(parcel_id: str):
                 "confidence_level": row.get("confidence_level") or "context_only",
                 "notes": row.get("notes"),
             })
+        # Load the latest HUD Fair Market Rent benchmarks for
+        # Yellowstone County. FMRs are regional rental benchmarks,
+        # not rent estimates for an individual parcel.
+        if county_context_id:
+            hud_result = (
+                client
+                .table("hud_fair_market_rents")
+                .select("*")
+                .eq("county_fips", "30111")
+                .order("fiscal_year", desc=True)
+                .limit(1)
+                .execute()
+            )
+
+            hud_row = (
+                hud_result.data[0]
+                if hud_result.data
+                else None
+            )
+
+            if hud_row:
+                fiscal_year = hud_row.get("fiscal_year")
+                area_name = (
+                    hud_row.get("area_name")
+                    or "Billings, MT HUD Metro FMR Area"
+                )
+
+                hud_metrics = [
+                    {
+                        "metric_name":
+                            "Efficiency fair market rent",
+                        "rent_field":
+                            "efficiency_rent",
+                        "change_field":
+                            "efficiency_yoy_change_pct",
+                    },
+                    {
+                        "metric_name":
+                            "One-bedroom fair market rent",
+                        "rent_field":
+                            "one_bedroom_rent",
+                        "change_field":
+                            "one_bedroom_yoy_change_pct",
+                    },
+                    {
+                        "metric_name":
+                            "Two-bedroom fair market rent",
+                        "rent_field":
+                            "two_bedroom_rent",
+                        "change_field":
+                            "two_bedroom_yoy_change_pct",
+                    },
+                    {
+                        "metric_name":
+                            "Three-bedroom fair market rent",
+                        "rent_field":
+                            "three_bedroom_rent",
+                        "change_field":
+                            "three_bedroom_yoy_change_pct",
+                    },
+                    {
+                        "metric_name":
+                            "Four-bedroom fair market rent",
+                        "rent_field":
+                            "four_bedroom_rent",
+                        "change_field":
+                            "four_bedroom_yoy_change_pct",
+                    },
+                ]
+
+                for index, metric in enumerate(
+                    hud_metrics,
+                    start=1,
+                ):
+                    rent_value = hud_row.get(
+                        metric["rent_field"]
+                    )
+                    change_value = hud_row.get(
+                        metric["change_field"]
+                    )
+
+                    rent_text = (
+                        f"${float(rent_value):,.0f}/month"
+                        if rent_value is not None
+                        else "Not available"
+                    )
+
+                    grouped["rental_context"].append({
+                        "id": f"hud-fmr-{index}",
+                        "parcel_id": parcel_id,
+                        "geography_name": area_name,
+                        "geography_level": "county_fmr_area",
+                        "context_category":
+                            "rental_context",
+                        "metric_name":
+                            metric["metric_name"],
+                        "metric_value": rent_value,
+                        "metric_text": rent_text,
+                        "metric_unit": "USD per month",
+                        "yoy_change_pct": change_value,
+                        "source_name":
+                            hud_row.get("source_name")
+                            or "HUD Fair Market Rents",
+                        "source_period":
+                            f"FY {fiscal_year}",
+                        "confidence_level":
+                            "context_only",
+                        "notes": (
+                            "HUD Fair Market Rent is a regional "
+                            "gross-rent benchmark used for housing "
+                            "program administration. It is not an "
+                            "asking-rent estimate, rental appraisal, "
+                            "or prediction for this parcel."
+                        ),
+                    })
 
         return {
             "parcel_id": parcel_id,

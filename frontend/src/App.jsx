@@ -572,7 +572,7 @@ async function getPrediction(parcelId) {
 
                     {parcelContext && (
             <section id="context-section" className="card contextCard">
-              <h2>Location, Demographic, Risk & Cost Context</h2>
+              <h2>Location, Demographic, Rental, Risk & Cost Context</h2>
               {parcelContext?.tract_fips && (
                 <p className="helperText">
                   Tract-level context matched to {parcelContext.tract_name}
@@ -580,18 +580,19 @@ async function getPrediction(parcelId) {
                 </p>
               )}
               <p className="helperText">
-                These indicators provide context only and do not change the model
-                estimate. Demographic and environmental indicators are Census-tract
-                context; historical storm events are county-level; school and
-                public-safety data may cover broader areas; construction-cost
-                indicators are national.
-              </p>
+                  These indicators provide context only and do not change the model
+                  estimate. Demographic and environmental indicators are Census-tract
+                  context; HUD rental benchmarks and historical storm events cover
+                  broader regional or county areas; school and public-safety data may
+                  cover broader areas; construction-cost indicators are national.
+                </p>
 
               <div className="contextGrid">
                 {[
                   ["construction_cost", "Construction Cost Context"],
                   ["environmental_risk", "Environmental Risk Context"],
                   ["demographic_context", "Demographic & Housing Context"],
+                  ["rental_context", "HUD Rental Market Context"],
                   ["storm_history", "Historical Storm Events"],
                   ["school_context", "School Context"],
                   ["public_safety", "Public Safety Context"],
@@ -610,14 +611,16 @@ async function getPrediction(parcelId) {
   key === "environmental_risk"
     ? 10
     : key === "demographic_context"
-      ? 10
-      : key === "storm_history"
-        ? 9
-        : key === "school_context"
-          ? 9
-          : key === "construction_cost"
-            ? 6
-            : 8
+        ? 10
+        : key === "rental_context"
+            ? 5
+            : key === "storm_history"
+                ? 9
+                : key === "school_context"
+                    ? 9
+                    : key === "construction_cost"
+                        ? 6
+                        : 8
 )} of {(parcelContext.context?.[key] || []).length} indicators
                         </p>
 
@@ -627,14 +630,16 @@ async function getPrediction(parcelId) {
   key === "environmental_risk"
     ? 10
     : key === "demographic_context"
-      ? 10
-      : key === "storm_history"
-        ? 9
-        : key === "school_context"
-          ? 9
-          : key === "construction_cost"
-            ? 6
-            : 8
+        ? 10
+        : key === "rental_context"
+            ? 5
+            : key === "storm_history"
+                ? 9
+                : key === "school_context"
+                    ? 9
+                    : key === "construction_cost"
+                        ? 6
+                        : 8
 )
                           .map((item) => (
                         <div className="contextMetric" key={item.id || item.metric_name}>
