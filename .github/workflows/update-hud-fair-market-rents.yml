@@ -1,0 +1,51 @@
+name: Update HUD Fair Market Rents
+
+on:
+  workflow_dispatch:
+
+  schedule:
+    # Monthly release check on the 25th at 1:15 PM UTC.
+    # HUD FMR data is released annually, but this detects
+    # the new fiscal-year release when the API publishes it.
+    - cron: "15 13 25 * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-hud-fair-market-rents
+  cancel-in-progress: false
+
+jobs:
+  update-hud-fmr:
+    name: Update HUD Fair Market Rents
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Verify pipeline syntax
+        run: python -m py_compile pipeline/update_hud_fair_market_rents.py
+
+      - name: Update HUD Fair Market Rents
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          HUD_API_TOKEN: ${{ secrets.HUD_API_TOKEN }}
+        run: python -m pipeline.update_hud_fair_market_rents
