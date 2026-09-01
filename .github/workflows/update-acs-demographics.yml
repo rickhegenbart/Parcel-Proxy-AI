@@ -1,0 +1,51 @@
+name: Update ACS Demographics
+
+on:
+  workflow_dispatch:
+
+  schedule:
+    # Monthly release check on the 20th at 1:25 PM UTC.
+    # ACS 5-year data is released annually, but the monthly
+    # check automatically detects a new release when available.
+    - cron: "25 13 20 * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-acs-demographics
+  cancel-in-progress: false
+
+jobs:
+  update-acs:
+    name: Update Census tract demographics
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Verify pipeline syntax
+        run: python -m py_compile pipeline/update_acs_demographics.py
+
+      - name: Update ACS demographic indicators
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          CENSUS_API_KEY: ${{ secrets.CENSUS_API_KEY }}
+        run: python -m pipeline.update_acs_demographics
