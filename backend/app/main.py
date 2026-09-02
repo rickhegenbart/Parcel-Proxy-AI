@@ -408,79 +408,67 @@ def get_daily_traffic(
 
 def filter_context_for_location(rows, parcel):
     """
-    Keep the most relevant public-safety and school context rows for the
-    parcel's city/address.
+    Keep the most relevant public-safety rows for the parcel's location.
 
-    Environmental risk remains county-level for now because the current FEMA
-    NRI import is county-level. Construction cost remains national.
+    School context is loaded separately using the parcel's exact Census
+    TIGER school-district mapping. Older generic school-context rows are
+    excluded here to prevent incorrect city-name or county-wide matches.
     """
     parcel = parcel or {}
 
-    city = (parcel.get("site_city") or "").upper()
-    address = (parcel.get("address_line_1") or "").upper()
+    city = (
+        parcel.get("site_city")
+        or ""
+    ).upper()
 
-    # Some parcel records may have city blank but address/city-like text elsewhere.
+    address = (
+        parcel.get("address_line_1")
+        or ""
+    ).upper()
+
     location_text = f"{city} {address}"
 
-    def school_match(geography):
-        geography = (geography or "").upper()
-
-        if "BILLINGS" in location_text:
-            return geography.startswith("BILLINGS ")
-
-        if "LAUREL" in location_text:
-            return geography.startswith("LAUREL ")
-
-        if "LOCKWOOD" in location_text:
-            return "LOCKWOOD" in geography
-
-        if "SHEPHERD" in location_text:
-            return "SHEPHERD" in geography
-
-        if "HUNTLEY" in location_text:
-            return "HUNTLEY" in geography
-
-        if "BROADVIEW" in location_text:
-            return "BROADVIEW" in geography
-
-        if "BLUE CREEK" in location_text:
-            return "BLUE CREEK" in geography
-
-        if "ELDER GROVE" in location_text:
-            return "ELDER GROVE" in geography
-
-        if "ELYSIAN" in location_text:
-            return "ELYSIAN" in geography
-
-        # Fallback: if we do not know the school area, keep the county-area
-        # district rows rather than hiding the entire school context.
-        return True
-
     def public_safety_match(geography):
-        geography = (geography or "").upper()
+        geography = (
+            geography
+            or ""
+        ).upper()
 
         if "BILLINGS" in location_text:
-            return "BILLINGS POLICE" in geography
+            return (
+                "BILLINGS POLICE"
+                in geography
+            )
 
-        # Fallback for non-Billings Yellowstone County parcels.
-        return "YELLOWSTONE COUNTY" in geography
+        # Fallback for non-Billings
+        # Yellowstone County parcels.
+        return (
+            "YELLOWSTONE COUNTY"
+            in geography
+        )
 
     filtered = []
 
     for row in rows:
-        category = row.get("context_category")
-        geography = row.get("geography_name") or ""
+        category = row.get(
+            "context_category"
+        )
+        geography = (
+            row.get("geography_name")
+            or ""
+        )
 
         if category == "school_context":
-            if school_match(geography):
-                filtered.append(row)
+            # Exact school context is loaded from
+            # parcel_school_district_map below.
+            continue
 
-        elif category == "public_safety":
-            if public_safety_match(geography):
+        if category == "public_safety":
+            if public_safety_match(
+                geography
+            ):
                 filtered.append(row)
-
         else:
-            # Keep environmental, civic, parcel-specific, and other context rows.
             filtered.append(row)
 
     return filtered
@@ -1117,7 +1105,285 @@ def get_parcel_context(parcel_id: str):
                             "or prediction for this parcel."
                         ),
                     })
+                # Load the parcel's exact Census TIGER school districts and
+        # attach the latest NCES enrollment and staffing indicators.
+        school_mapping_result = (
+            client
+            .table("parcel_school_district_map")
+            .select(
+                "district_type, district_geoid, lea_id, "
+                "district_name, low_grade, high_grade, "
+                "tiger_year"
+            )
+            .eq("parcel_id", parcel_id)
+            .order("district_type")
+            .execute()
+        )
 
+        school_mappings = (
+            school_mapping_result.data
+            or []
+        )
+
+        school_lea_ids = sorted({
+            str(mapping.get("lea_id")).strip()
+            for mapping in school_mappings
+            if mapping.get("lea_id")
+        })
+
+        if school_lea_ids:
+            school_indicator_result = (
+                client
+                .table(
+                    "school_district_indicators"
+                )
+                .select(
+                    "lea_id, school_year, district_name, "
+                    "total_students, teacher_fte, "
+                    "student_teacher_ratio, source_name, "
+                    "source_url, source_date, "
+                    "confidence_level, notes"
+                )
+                .in_("lea_id", school_lea_ids)
+                .order(
+                    "school_year",
+                    desc=True,
+                )
+                .execute()
+            )
+
+            latest_indicator_by_lea = {}
+
+            for indicator in (
+                school_indicator_result.data
+                or []
+            ):
+                indicator_lea_id = str(
+                    indicator.get("lea_id")
+                    or ""
+                ).strip()
+
+                if (
+                    indicator_lea_id
+                    and indicator_lea_id
+                    not in latest_indicator_by_lea
+                ):
+                    latest_indicator_by_lea[
+                        indicator_lea_id
+                    ] = indicator
+
+            district_type_order = {
+                "elementary": 1,
+                "secondary": 2,
+                "unified": 3,
+            }
+
+            school_mappings = sorted(
+                school_mappings,
+                key=lambda mapping: (
+                    district_type_order.get(
+                        mapping.get(
+                            "district_type"
+                        ),
+                        99,
+                    ),
+                    mapping.get(
+                        "district_name"
+                    )
+                    or "",
+                ),
+            )
+
+            for mapping in school_mappings:
+                lea_id = str(
+                    mapping.get("lea_id")
+                    or ""
+                ).strip()
+
+                indicator = (
+                    latest_indicator_by_lea.get(
+                        lea_id
+                    )
+                )
+
+                if not indicator:
+                    continue
+
+                district_type = (
+                    mapping.get(
+                        "district_type"
+                    )
+                    or "district"
+                )
+
+                district_name = (
+                    mapping.get(
+                        "district_name"
+                    )
+                    or indicator.get(
+                        "district_name"
+                    )
+                    or lea_id
+                )
+
+                school_year = (
+                    indicator.get(
+                        "school_year"
+                    )
+                )
+
+                total_students = (
+                    indicator.get(
+                        "total_students"
+                    )
+                )
+
+                teacher_fte = (
+                    indicator.get(
+                        "teacher_fte"
+                    )
+                )
+
+                student_teacher_ratio = (
+                    indicator.get(
+                        "student_teacher_ratio"
+                    )
+                )
+
+                school_metrics = [
+                    {
+                        "metric_key":
+                            "total-students",
+                        "metric_name":
+                            "Total students",
+                        "metric_value":
+                            total_students,
+                        "metric_text": (
+                            f"{int(float(total_students)):,} students"
+                            if total_students
+                            is not None
+                            else "Not available"
+                        ),
+                        "metric_unit":
+                            "students",
+                    },
+                    {
+                        "metric_key":
+                            "teacher-fte",
+                        "metric_name":
+                            "Teacher FTE",
+                        "metric_value":
+                            teacher_fte,
+                        "metric_text": (
+                            f"{float(teacher_fte):,.2f} teacher FTE"
+                            if teacher_fte
+                            is not None
+                            else "Not available"
+                        ),
+                        "metric_unit":
+                            "teacher FTE",
+                    },
+                    {
+                        "metric_key":
+                            "student-teacher-ratio",
+                        "metric_name":
+                            "Student-teacher ratio",
+                        "metric_value":
+                            student_teacher_ratio,
+                        "metric_text": (
+                            f"{float(student_teacher_ratio):.2f} "
+                            "students per teacher FTE"
+                            if student_teacher_ratio
+                            is not None
+                            else "Not available"
+                        ),
+                        "metric_unit":
+                            "students per teacher FTE",
+                    },
+                ]
+
+                for metric in school_metrics:
+                    grouped[
+                        "school_context"
+                    ].append({
+                        "id": (
+                            "school-"
+                            f"{lea_id}-"
+                            f"{metric['metric_key']}"
+                        ),
+                        "parcel_id": parcel_id,
+                        "lea_id": lea_id,
+                        "district_type":
+                            district_type,
+                        "district_geoid":
+                            mapping.get(
+                                "district_geoid"
+                            ),
+                        "geography_name":
+                            district_name,
+                        "geography_level":
+                            (
+                                f"{district_type}_"
+                                "school_district"
+                            ),
+                        "low_grade":
+                            mapping.get(
+                                "low_grade"
+                            ),
+                        "high_grade":
+                            mapping.get(
+                                "high_grade"
+                            ),
+                        "tiger_year":
+                            mapping.get(
+                                "tiger_year"
+                            ),
+                        "context_category":
+                            "school_context",
+                        "metric_name":
+                            metric[
+                                "metric_name"
+                            ],
+                        "metric_value":
+                            metric[
+                                "metric_value"
+                            ],
+                        "metric_text":
+                            metric[
+                                "metric_text"
+                            ],
+                        "metric_unit":
+                            metric[
+                                "metric_unit"
+                            ],
+                        "source_name":
+                            indicator.get(
+                                "source_name"
+                            )
+                            or (
+                                "NCES Common "
+                                "Core of Data"
+                            ),
+                        "source_url":
+                            indicator.get(
+                                "source_url"
+                            ),
+                        "source_period":
+                            school_year,
+                        "source_date":
+                            indicator.get(
+                                "source_date"
+                            ),
+                        "confidence_level":
+                            indicator.get(
+                                "confidence_level"
+                            )
+                            or "context_only",
+                        "notes":
+                            indicator.get(
+                                "notes"
+                            ),
+                    })
         return {
             "parcel_id": parcel_id,
             "tract_fips": tract_fips,

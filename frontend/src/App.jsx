@@ -582,9 +582,10 @@ async function getPrediction(parcelId) {
               <p className="helperText">
                   These indicators provide context only and do not change the model
                   estimate. Demographic and environmental indicators are Census-tract
-                  context; HUD rental benchmarks and historical storm events cover
-                  broader regional or county areas; school and public-safety data may
-                  cover broader areas; construction-cost indicators are national.
+                  context; school indicators use coordinate-matched Census TIGER
+                  districts and NCES district statistics; historical storm events and
+                  public-safety data cover broader areas; construction-cost indicators
+                  are national.
                 </p>
 
               <div className="contextGrid">
