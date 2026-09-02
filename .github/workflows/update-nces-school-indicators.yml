@@ -1,0 +1,54 @@
+name: Update NCES School Indicators
+
+on:
+  workflow_dispatch:
+
+  schedule:
+    # Check district indicators monthly after the parcel-to-district
+    # mapping workflow has had time to finish.
+    - cron: "15 15 8 * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-nces-school-indicators
+  cancel-in-progress: false
+
+jobs:
+  update-nces-school-indicators:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    defaults:
+      run:
+        working-directory: backend
+
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Validate NCES update script
+        run: |
+          python -m py_compile pipeline/update_nces_school_indicators.py
+
+      - name: Update NCES school indicators
+        run: |
+          python -m pipeline.update_nces_school_indicators
